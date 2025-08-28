@@ -136,15 +136,6 @@ This will prompt for:
 - License key (if applicable)
 - Other scanner settings
 
-## Output Formats
-
-### Standard Output
-Human-readable recommendations with color coding:
-- 🔴 **Critical** - Immediate attention required
-- 🟡 **Warning** - Should be addressed
-- 🟢 **Success** - Configuration is secure
-- ℹ️ **Info** - Informational findings
-
 ### JSON Output
 Machine-readable format for automation:
 
