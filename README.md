@@ -1,6 +1,18 @@
 # Mini PQC Scanner
 
-A streamlined, CLI-only version of the Post-Quantum Cryptography Scanner. This mini version focuses exclusively on core scanning functionality without web interfaces, Docker testing, or server components.
+## The Quantum Threat is Real - Are You Ready?
+
+Post-Quantum Cryptography (PQC) represents the next evolution in cybersecurity, designed to protect against the imminent threat of quantum computers that will render current encryption methods obsolete. With quantum computers advancing rapidly and NIST standardizing PQC algorithms in 2024, organizations must act **now** to assess and upgrade their cryptographic infrastructure.
+
+**Why PQC Matters:**
+- **Quantum computers will break RSA, ECDSA, and ECDH** - the foundation of today's internet security
+- **"Harvest now, decrypt later" attacks** are already happening - adversaries are collecting encrypted data today to decrypt once quantum computers are available
+- **NIST has standardized PQC algorithms** (ML-KEM, ML-DSA, SLH-DSA) - the migration window is closing
+- **Regulatory compliance** requirements are emerging globally for quantum-safe cryptography
+
+Mini PQC Scanner is a streamlined, command-line tool that helps organizations assess their quantum readiness by scanning systems, services, and cryptographic implementations. This lightweight version focuses on core scanning functionality, making it perfect for automated assessments, CI/CD integration, and rapid security audits.
+
+**Enterprise Solutions:** For comprehensive PQC migration planning, automated remediation, and enterprise-grade reporting, explore our full PQC platform at [quantumcrafts.ai](https://quantumcrafts.ai). Our enterprise version includes advanced features like automated certificate management, policy enforcement, compliance reporting, and guided migration workflows.
 
 ## Overview
 
