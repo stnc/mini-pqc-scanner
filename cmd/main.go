@@ -178,8 +178,15 @@ func initCommands() {
 				if len(args) > 0 && args[0] == "-json" {
 					jsonOutput = true
 				}
-				fmt.Println("Running comprehensive scan with all modules...")
-				return linux.RunAllCommands(jsonOutput)
+				if !jsonOutput {
+					fmt.Println("Running comprehensive scan with all modules...")
+				}
+				recs := linux.RunAllCommands(jsonOutput)
+				if jsonOutput {
+					// Return nil to prevent displayRecommendations from being called
+					return nil
+				}
+				return recs
 			},
 			Desc: "Run all scan commands",
 		},
