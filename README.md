@@ -315,4 +315,4 @@ See LICENSE file for licensing information.
 
 ## Support
 
-For issues and questions related to the mini PQC scanner, please refer to the main PQC scanner documentation or contact your system administrator.
+Feel free to contact us at quantumcrafts.ai
