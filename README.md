@@ -120,7 +120,7 @@ Execute specific commands directly:
 | `pgp` | Check PGP configuration |
 | `parsecrt` | Parse and analyze certificates |
 | `tls` | Test TLS configuration |
-| `tcpdump` | Analyze network traffic |
+| `tcpdump` | Network traffic analysis and PQC readiness |
 | `all` | Run all scan modules |
 
 ### Configuration
@@ -172,8 +172,75 @@ Machine-readable format for automation:
 # Test TLS configuration
 ./bin/mini-pqc-scanner tls example.com
 
-# Analyze network traffic
+# Check tcpdump capabilities and PQC readiness
 ./bin/mini-pqc-scanner tcpdump
+
+# Capture network traffic (requires sudo)
+./bin/mini-pqc-scanner tcpdump -dump
+
+# Parse captured traffic from default location
+./bin/mini-pqc-scanner tcpdump -parse
+
+# Parse specific capture file
+./bin/mini-pqc-scanner tcpdump -parse -f /path/to/capture.pcap
+
+# List available network interfaces
+./bin/mini-pqc-scanner tcpdump -list
+```
+
+### tcpdump Module Details
+
+The tcpdump module provides network traffic analysis for PQC readiness assessment:
+
+#### Basic Usage
+```bash
+# Check tcpdump installation and capabilities
+./bin/mini-pqc-scanner tcpdump
+```
+This command:
+- Verifies tcpdump and tshark installation
+- Checks protocol support (TLS, SSH, IPsec, QUIC)
+- Reports version information
+- Identifies missing PQC-relevant capabilities
+
+#### Traffic Capture
+```bash
+# Capture network traffic (requires sudo privileges)
+./bin/mini-pqc-scanner tcpdump -dump
+```
+This command:
+- Captures encrypted traffic for 30 seconds by default
+- Monitors ports: 443, 8443, 22, 500, 4500, 51820, 25, 465, 587, 993, 995
+- Saves capture to `./dump/` directory with timestamp
+- Limits file size to 1MB maximum
+- Requires sudo access for packet capture
+
+**Note**: To avoid sudo prompts, run:
+```bash
+sudo setcap cap_net_raw,cap_net_admin=eip $(which tcpdump)
+```
+
+#### Traffic Analysis
+```bash
+# Parse most recent capture file
+./bin/mini-pqc-scanner tcpdump -parse
+
+# Parse specific capture file
+./bin/mini-pqc-scanner tcpdump -parse -f /path/to/capture.pcap
+```
+This command:
+- Analyzes TLS handshakes for PQC readiness
+- Identifies non-quantum-resistant algorithms
+- Reports cipher suites and key exchange methods
+- Provides recommendations for PQC migration
+
+#### Advanced Options
+```bash
+# List network interfaces
+./bin/mini-pqc-scanner tcpdump -list
+
+# Extended capture with process tracking (if BCC tools installed)
+./bin/mini-pqc-scanner tcpdump -dump -process-track -s 60
 ```
 
 ## Development
