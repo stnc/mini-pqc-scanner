@@ -44,6 +44,8 @@ type CertKeyInfo struct {
 	QuantumWarning string // Warning message about quantum safety
 	IsStaticRSA    bool   // Whether this is a static RSA certificate
 	StaticRSAWarning string // Warning about static RSA certificates
+	SignatureSeverity int  // Severity level for signature vulnerabilities (1-5)
+	KeyExchangeSeverity int // Severity level for key exchange vulnerabilities (1-5)
 }
 
 // GroupInfo represents information about a key exchange group
@@ -81,6 +83,11 @@ type TLSScanResult struct {
 	// Key exchange group information
 	SupportedGroups []GroupInfo       // Supported key exchange groups
 	PQCGroups      []GroupInfo       // PQC and hybrid key exchange groups
+	
+	// Quantum vulnerability assessment
+	KeyExchangeVulnerable bool         // Whether key exchange is quantum vulnerable (CRITICAL)
+	SignatureVulnerable   bool         // Whether signatures are quantum vulnerable (MODERATE)
+	HNDLRisk             bool         // Whether vulnerable to Harvest Now Decrypt Later attacks
 }
 
 // analyzeCertificateKey analyzes the certificate's key type and provides quantum safety information
@@ -89,6 +96,8 @@ func (s *TLSScanner) analyzeCertificateKey(cert *x509.Certificate) CertKeyInfo {
 		Type:          "Unknown",
 		IsQuantumSafe: false,
 		IsStaticRSA:   false,
+		SignatureSeverity: 3,    // Default MODERATE severity for signatures
+		KeyExchangeSeverity: 5,  // Default CRITICAL severity for key exchange
 	}
 	
 	switch pub := cert.PublicKey.(type) {
@@ -96,13 +105,18 @@ func (s *TLSScanner) analyzeCertificateKey(cert *x509.Certificate) CertKeyInfo {
 		info.Type = "RSA"
 		info.Bits = pub.N.BitLen() // Get actual bit length
 		
-		// RSA keys are not quantum-safe
-		info.QuantumWarning = fmt.Sprintf("Certificate uses RSA-%d – not quantum-safe. "+
-			"Replace with PQC or use short-lifetime certificates with PFS.", info.Bits)
+		// RSA signatures: MODERATE priority (certificates expire)
+		info.SignatureSeverity = 3
+		info.QuantumWarning = fmt.Sprintf("Certificate uses RSA-%d signatures – quantum-vulnerable but MODERATE priority. "+
+			"Certificates are short-lived and will expire before quantum computers can break signatures. "+
+			"Plan migration to PQC signatures (ML-DSA/Dilithium) for long-lived roots and code-signing.", info.Bits)
 		
-		// Detect static RSA certificates
-		info.IsStaticRSA = true // RSA certificates are potentially static RSA
-		info.StaticRSAWarning = "Static RSA certificate detected. This lacks Perfect Forward Secrecy and is vulnerable to retrospective decryption with quantum computers. Use ECDHE/DHE key exchange with TLS 1.2+ and short-lived certificates."
+		// RSA key exchange: CRITICAL priority (HNDL attacks)
+		info.KeyExchangeSeverity = 5
+		info.IsStaticRSA = true
+		info.StaticRSAWarning = "CRITICAL: RSA key exchange detected. Vulnerable to 'Harvest Now, Decrypt Later' attacks. "+
+			"Adversaries can record encrypted traffic today and decrypt it later with quantum computers. "+
+			"Immediate migration to PQC KEMs (ML-KEM/Kyber) or hybrid ECDH+ML-KEM is strongly recommended."
 		
 	case *ecdsa.PublicKey:
 		info.Type = "ECDSA"
@@ -110,19 +124,30 @@ func (s *TLSScanner) analyzeCertificateKey(cert *x509.Certificate) CertKeyInfo {
 		// Determine the curve
 		info.Curve = pub.Curve.Params().Name
 		
-		// ECDSA keys are not quantum-safe
-		info.QuantumWarning = fmt.Sprintf("Certificate uses ECDSA %s – not quantum-safe, "+
-			"but acceptable for short-term lifespans.", info.Curve)
+		// ECDSA signatures: MODERATE priority (certificates expire)
+		info.SignatureSeverity = 3
+		info.QuantumWarning = fmt.Sprintf("Certificate uses ECDSA %s signatures – quantum-vulnerable but MODERATE priority. "+
+			"Short-lived TLS certificates will expire before quantum computers can forge signatures. "+
+			"Migration to PQC signatures important for long-lived artifacts (firmware, root CAs).", info.Curve)
+		
+		// ECDH key exchange would be CRITICAL, but we detect this separately
+		info.KeyExchangeSeverity = 5
 		
 	case ed25519.PublicKey:
 		info.Type = "Ed25519"
 		
-		// Ed25519 keys are not quantum-safe
-		info.QuantumWarning = "Certificate uses Ed25519 – not quantum-safe, but acceptable for short-term lifespans."
+		// Ed25519 signatures: MODERATE priority
+		info.SignatureSeverity = 3
+		info.QuantumWarning = "Certificate uses Ed25519 signatures – quantum-vulnerable but MODERATE priority. "+
+			"Short-lived TLS certificates acceptable; focus on PQC key exchange first."
+		
+		info.KeyExchangeSeverity = 5
 		
 	default:
 		// Handle unknown key types
 		info.Type = "Unknown"
+		info.SignatureSeverity = 3
+		info.KeyExchangeSeverity = 5
 		info.QuantumWarning = "Unknown certificate key type – unable to assess quantum safety."
 	}
 	
@@ -133,9 +158,16 @@ func (s *TLSScanner) analyzeCertificateKey(cert *x509.Certificate) CertKeyInfo {
 		oidStr := ext.Id.String()
 		if strings.Contains(strings.ToLower(oidStr), "dilithium") || 
 		   strings.Contains(strings.ToLower(oidStr), "falcon") ||
-		   strings.Contains(strings.ToLower(oidStr), "sphincs") {
+		   strings.Contains(strings.ToLower(oidStr), "sphincs") ||
+		   strings.Contains(strings.ToLower(oidStr), "ml-dsa") {
 			info.IsQuantumSafe = true
-			info.QuantumWarning = "Certificate appears to use post-quantum cryptography."
+			info.SignatureSeverity = 1  // Low severity - already using PQC signatures
+			info.QuantumWarning = "Certificate uses post-quantum signatures (ML-DSA/Dilithium/Falcon/SPHINCS+) - quantum-safe."
+			break
+		}
+		if strings.Contains(strings.ToLower(oidStr), "kyber") ||
+		   strings.Contains(strings.ToLower(oidStr), "ml-kem") {
+			info.KeyExchangeSeverity = 1  // Low severity - already using PQC key exchange
 			break
 		}
 	}
@@ -190,6 +222,9 @@ func (s *TLSScanner) ScanTLS(host, port string) *TLSScanResult {
 		HasPFS:          false,
 		SupportedGroups: []GroupInfo{},
 		PQCGroups:      []GroupInfo{},
+		KeyExchangeVulnerable: false,
+		SignatureVulnerable:   false,
+		HNDLRisk:             false,
 	}
 	
 	// Check for supported protocol versions
@@ -245,6 +280,9 @@ func (s *TLSScanner) ScanTLS(host, port string) *TLSScanResult {
 
 	// Check for Cloudflare PQC indicators
 	s.checkCloudflareHeaders(result, host)
+	
+	// Assess quantum vulnerabilities and HNDL risk
+	s.assessQuantumVulnerabilities(result)
 
 	return result
 }
@@ -532,3 +570,73 @@ func (s *TLSScanner) checkSupportedCipherSuites(result *TLSScanResult, host, por
 	}
 }
 
+// assessQuantumVulnerabilities evaluates the quantum vulnerability risk based on key exchange and signatures
+func (s *TLSScanner) assessQuantumVulnerabilities(result *TLSScanResult) {
+	// Assess signature vulnerabilities (MODERATE priority)
+	if result.Certificate != nil {
+		certInfo := result.CertKeyInfo
+		switch certInfo.Type {
+		case "RSA", "ECDSA", "Ed25519":
+			result.SignatureVulnerable = true
+		default:
+			// Unknown types are assumed vulnerable
+			result.SignatureVulnerable = true
+		}
+		
+		// Override if already using PQC signatures
+		if certInfo.IsQuantumSafe && certInfo.SignatureSeverity == 1 {
+			result.SignatureVulnerable = false
+		}
+	}
+	
+	// Assess key exchange vulnerabilities (CRITICAL priority - HNDL risk)
+	result.KeyExchangeVulnerable = s.isKeyExchangeVulnerable(result)
+	result.HNDLRisk = result.KeyExchangeVulnerable
+	
+	// Add findings based on vulnerability assessment
+	if result.KeyExchangeVulnerable {
+		result.PQCFindings = append(result.PQCFindings, 
+			"CRITICAL: Key exchange uses quantum-vulnerable algorithms (RSA/ECDH). "+
+			"Vulnerable to 'Harvest Now, Decrypt Later' attacks.")
+	}
+	
+	if result.SignatureVulnerable {
+		result.PQCFindings = append(result.PQCFindings,
+			"MODERATE: Certificate signatures use quantum-vulnerable algorithms. "+
+			"Less urgent due to certificate expiration, but plan PQC migration for long-lived artifacts.")
+	}
+}
+
+// isKeyExchangeVulnerable determines if the key exchange mechanism is quantum vulnerable
+func (s *TLSScanner) isKeyExchangeVulnerable(result *TLSScanResult) bool {
+	// Check if any PQC key exchange groups are detected
+	if len(result.PQCGroups) > 0 {
+		return false // Has PQC key exchange
+	}
+	
+	// Check cipher suites for key exchange mechanisms
+	for _, cipherInfo := range result.SupportedCiphers {
+		cipherName := strings.ToUpper(cipherInfo.Name)
+		
+		// Check for PQC/hybrid key exchange in cipher names
+		if strings.Contains(cipherName, "KYBER") || 
+		   strings.Contains(cipherName, "ML_KEM") ||
+		   strings.Contains(cipherName, "NTRU") {
+			return false // Has PQC key exchange
+		}
+		
+		// Check for non-PFS (static RSA) - definitely vulnerable
+		if strings.Contains(cipherName, "TLS_RSA_WITH_") {
+			return true // Static RSA key exchange
+		}
+	}
+	
+	// Check for static RSA certificates (vulnerable to key exchange attacks)
+	if result.Certificate != nil && result.CertKeyInfo.IsStaticRSA {
+		return true
+	}
+	
+	// Default assumption: if using standard ECDH/DHE without PQC, it's vulnerable
+	// This is conservative but aligns with HNDL threat model
+	return true
+}

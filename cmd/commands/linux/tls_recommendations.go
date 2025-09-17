@@ -12,9 +12,27 @@ func generateTLSRecommendations(result *scan.TLSScanResult, awsResults map[strin
 	recommendations := make([]scan.Recommendation, 0)
 	moduleID := scan.CommandModules["testtls"] // Module ID for testtls
 
-	// Section 1: Immediate Actions
+	// Section 1: CRITICAL - Key Exchange Vulnerabilities (HNDL Risk)
 	sectionID := 1
 	itemID := 1
+	
+	// CRITICAL: Key exchange vulnerabilities (Harvest Now, Decrypt Later)
+	if result.KeyExchangeVulnerable {
+		recommendations = append(recommendations, scan.Recommendation{
+			ModuleID:  moduleID,
+			SectionID: sectionID,
+			ItemID:    itemID,
+			Text:      "CRITICAL: Migrate key exchange to PQC/hybrid algorithms immediately",
+			Type:      scan.CriticalRecommendation,
+			Details:   "TLS endpoints using RSA/ECDH for key exchange are vulnerable to 'Harvest Now, Decrypt Later' attacks. Adversaries can record encrypted traffic today and decrypt it later once quantum computers arrive. Immediate migration to PQC KEMs (ML-KEM/Kyber) or hybrid key exchange is strongly recommended.",
+			Severity:  5, // CRITICAL severity
+		})
+		itemID++
+	}
+	
+	// Section 2: MODERATE - Certificate Signature Vulnerabilities
+	sectionID = 2
+	itemID = 1
 
 	// Recommendations based on compliance status
 	if !result.IsCompliant {
@@ -58,41 +76,27 @@ func generateTLSRecommendations(result *scan.TLSScanResult, awsResults map[strin
 		}
 	}
 
-	// Certificate recommendations
-	if result.Certificate != nil && !result.CertKeyInfo.IsQuantumSafe {
+	// MODERATE: Certificate signature recommendations
+	if result.SignatureVulnerable {
 		recommendations = append(recommendations, scan.Recommendation{
 			ModuleID:  moduleID,
 			SectionID: sectionID,
 			ItemID:    itemID,
-			Text:      "Plan migration to PQC/hybrid certificate signatures as ecosystem support matures; in the interim, prefer TLS 1.3 with ECDHE and short-lived certificates",
+			Text:      "MODERATE: Plan migration to PQC signatures for long-lived artifacts",
 			Type:      scan.WarningRecommendation,
-			Severity:  4, // High severity - critical for PQC implementation
+			Details:   "TLS certificates use ECC/RSA signatures. While quantum-vulnerable, the risk is less immediate since certificates are short-lived. Migration to PQC signatures (ML-DSA/Dilithium) should be planned, especially for long-lived roots and code-signing, but is not as urgent as PQC key exchange.",
+			Severity:  3, // MODERATE severity
 		})
 		itemID++
-
-		// RSA key exchange / no-PFS warning (only when applicable)
-		hasRSAKeyExchange := false
-		for _, c := range result.SupportedCiphers {
-			if strings.HasPrefix(c.Name, "TLS_RSA_") {
-				hasRSAKeyExchange = true
-				break
-			}
-		}
-		if hasRSAKeyExchange || !result.HasPFS {
-			recommendations = append(recommendations, scan.Recommendation{
-				ModuleID:  moduleID,
-				SectionID: sectionID,
-				ItemID:    itemID,
-				Text:      "Disable RSA key exchange (TLS_RSA_*); require ECDHE for TLS 1.2 and prefer TLS 1.3",
-				Type:      scan.WarningRecommendation,
-				Severity:  3, // Medium severity - important for PQC readiness
-			})
-			itemID++
-		}
 	}
+	
+	// Section 3: Immediate Technical Issues
+	sectionID = 3
+	itemID = 1
 
-	// Section 2: Future Preparation
-	sectionID = 2
+
+	// Section 4: Future Preparation
+	sectionID = 4
 	itemID = 1
 
 	// General TLS recommendations
