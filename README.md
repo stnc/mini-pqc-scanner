@@ -1,6 +1,6 @@
 # Mini PQC Scanner
 
-#  Please note that this project is a fork and will use the windows environment to learn Post-Quantum Cryptography, and the necessary resources will be added.
+#  Please note that this project is a fork and will be updated with the necessary resources for Windows OS to learn Post-Quantum Cryptography.
 
 
 
