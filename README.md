@@ -1,5 +1,9 @@
 # Mini PQC Scanner
 
+#  Please note that this project is a fork and will use the windows environment to learn Post-Quantum Cryptography, and the necessary resources will be added.
+
+
+
 ## The Quantum Threat is Real - Are You Ready?
 
 Post-Quantum Cryptography (PQC) represents the next evolution in cybersecurity, designed to protect against the imminent threat of quantum computers that will render current encryption methods obsolete. With quantum computers advancing rapidly and NIST standardizing PQC algorithms in 2024, organizations must act **now** to assess and upgrade their cryptographic infrastructure.
